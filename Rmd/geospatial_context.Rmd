@@ -1,0 +1,107 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup}
+library(tidyverse)
+
+library(sf)       # for mapping
+library(ggsvg)    # for using svg icons in ggplot2
+```
+
+
+## 1. Read in geospatial files
+
+*Source:* [ONS Geoportal Countries](https://geoportal.statistics.gov.uk/datasets/ons::countries-december-2021-gb-buc/explore?location=49.003829%2C1.290710%2C5.17)
+
+```{r}
+# read in shapefile for Great Britain
+uk_outline <- read_sf("../data/Countries_(December_2021)_GB_BUC/CTRY_DEC_2021_GB_BUC.shp") %>% 
+  st_union() # merge polygons to give an outline
+
+# check everything looks as expected
+ggplot(uk_outline) +
+  geom_sf(colour=NA) +
+  theme_void()
+```
+## 2. Create a grid
+
+See [sf docs](https://r-spatial.github.io/sf/reference/st_make_grid.html).
+
+```{r}
+
+# create a hexagonal grid
+grid <- st_make_grid(uk_outline,
+                     square = FALSE,
+                     cellsize = 20000)
+
+# check what the grid looks like
+ggplot() +
+  geom_sf(data = uk_outline, colour=NA) +
+  geom_sf(data = grid, alpha = 0, colour = "grey80") +
+  theme_void()
+
+```
+# 3. Experiment with grid
+
+```{r}
+cell_touches_outline <- function(cell){
+
+  cell_touches <- cell %>% 
+    st_intersects(uk_outline, sparse = FALSE)
+
+      # extract logical from matrix
+  cell_touches[1,1]
+}
+
+cell_touches_outline(grid[1])
+
+# find centres of each grid hexagon
+centroids_gs <- grid %>% 
+  # only for grid cells with UK outline
+  as.data.frame() %>% 
+  mutate(cell_touches = map_lgl(geometry, ~cell_touches_outline(.x))) %>% 
+  filter(cell_touches) %>% 
+  st_as_sf() %>% 
+  st_centroid()
+
+# convert to (x,y) coordinates so can use geom_point (rather than geom_sf)
+centroids_coord <- centroids_gs %>% 
+  st_coordinates() %>% 
+  as_data_frame()
+
+# create an svg to plotted at the centre of each grid hexagon
+circle_txt <- '
+  <svg viewBox="0 0 100 100 ">
+    <circle id="top" cx="50" cy="50" r="20" fill="brown" stroke="black" />
+  </svg>
+  '
+
+tree_txt <- '<?xml version="1.0" encoding="UTF-8"?>
+<svg width="128pt" height="128pt" version="1.1" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+ <g fill-rule="evenodd" fill="#73BC9B" stroke-color="#73BC9B"
+       fill-opacity="0.5" stroke-opacity="0.8">
+  <path d="m33.176 77.25c2.207 5.8359 12.145 7.6602 17.449 2.793 1.2031 9.6133 16.406 11.16 20.156 2.3633 6.293 6.1953 18.863 4.0117 23.98-4.4648 11.09 1.3281 18.73-6.3711 15.391-16.039 7.0898-6.0742 7.168-17.996-0.9375-23.188 4.3789-9.0469-4.3867-20.066-13.371-17.059-0.72266-11.395-8.3984-16.48-19.484-14.008-5-9.8281-17.031-8.8125-22.301-0.11328-11.199-3.7109-22.527 3.0312-22.438 14.266-8.9609-1.6523-15.656 8.8125-9.9336 16.246-8.582 2.4531-11.336 13.156-5.3008 19.492-8.0273 13.262 3.5977 24.848 16.789 19.711z"/>
+  <path d="m60.059 38.68 6.1992 2.8281 1.5703 17.77 7.7891-6.6484-1.1719-16.301 1.0469-0.074219 2.582 14.141 9.2383-8.0078 3.5898-0.14844-1.9844 2.1367 14.703-0.9375-1.2695 1.3125-15.383 1.7227-10.25 11.039 17.551 7.0195 0.59766 2.2461-21.27-5.9023-4.9766 5.3594 6.6172 62.156h-18.324l2.2617-68.832-3.8281-5.5195-20.18-7.875-0.59766-1.8711 17.34 4.7969-11.578-16.691 2.8633-0.23438 6.9609 8.0195 0.27344-9.207 0.91016-0.16016 1.1875 12.246 6.875 8.3516z"/>
+ </g>
+</svg>
+'
+
+ggplot() +
+  geom_sf(data = uk_outline, colour=NA) +
+  #geom_sf(data = grid, alpha = 0, colour = "grey80") +
+  geom_point_svg(data = centroids_coord,
+             mapping = aes(X,Y),
+             svg =tree_txt,
+             hjust = 0.5, vjust = 0.5, size = 1.5
+             ) +
+  #geom_sf(data = centroids_gs) +
+  theme_void() +
+  theme(plot.background = element_rect(fill="white", colour="white"))
+
+ggsave("../image_output/debug.jpg")
+```
+
