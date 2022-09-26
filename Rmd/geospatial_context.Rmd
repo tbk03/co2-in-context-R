@@ -33,10 +33,15 @@ See [sf docs](https://r-spatial.github.io/sf/reference/st_make_grid.html).
 
 ```{r}
 
+# 20000
+
 # create a hexagonal grid
 grid <- st_make_grid(uk_outline,
                      square = FALSE,
-                     cellsize = 20000)
+                     cellsize = 40000) %>%
+  as.data.frame() %>% 
+  #slice_sample(n = 10) %>% 
+  st_as_sf()
 
 # check what the grid looks like
 ggplot() +
@@ -73,13 +78,19 @@ grids_UK <- grid %>%
   st_as_sf()
 
 # generate a random point within each grid cell
-random_points_in_grid_cells <- st_sample(grids_UK, size = rep(1, nrow(grids_UK)))
+random_points_in_grid_cells <- st_sample(grids_UK, 
+                                         size = rep(10, nrow(grids_UK))) %>% 
+                              st_as_sf()
+  
 
 
 # convert to (x,y) coordinates so can use geom_point (rather than geom_sf)
 point_coord <- random_points_in_grid_cells %>% 
+  
+  st_filter(uk_outline[1]) %>% 
   st_coordinates() %>% 
   as_data_frame()
+
 
 
 ```
@@ -123,9 +134,12 @@ tree4_txt <-  '<?xml version="1.0" encoding="UTF-8"?>
 
 pallette <- c("red", "blue", "yellow", "green")
 
+tree_palette <- c("#DACC9B", "#8A7441", "#5E5C17", "#49431A", "#302D09",
+                  "#A9AC32", "#768A0F", "#171404")
+
 plot_df <- point_coord %>% 
   mutate(tree_type = sample.int(4, nrow(point_coord), replace=TRUE),
-         tree_colour = sample(pallette, nrow(point_coord), replace=TRUE), 
+         tree_colour = sample(tree_palette, nrow(point_coord), replace=TRUE), 
          tree_svg = case_when(
            tree_type == 1 ~ tree1_txt,
            tree_type == 2 ~ tree2_txt,
@@ -134,6 +148,7 @@ plot_df <- point_coord %>%
            TRUE ~ tree1_txt
          ))
 
+
 ggplot() +
   geom_sf(data = uk_outline, colour=NA) +
   #geom_sf(data = grid, alpha = 0, colour = "grey80") +
@@ -141,7 +156,9 @@ ggplot() +
              mapping = aes(X,Y, 
                            svg = I(tree_svg),
                            css(".tree", fill = tree_colour)),
-             hjust = 0.5, vjust = 0.5, size = 1.5
+             hjust = 0.5, vjust = 0, size = 2.5,
+             css(".tree", 'fill-opacity' = 0.7),
+             css(".tree", 'stroke-opacity' = 0.9)
              ) +
   #geom_sf(data = centroids_gs
   scale_svg_fill_identity(aesthetics = css(".tree", fill = tree_colour)) +
