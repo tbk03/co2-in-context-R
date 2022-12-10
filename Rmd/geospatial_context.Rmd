@@ -1,8 +1,13 @@
 ---
-title: "R Notebook"
-output:
-  html_document:
-    df_print: paged
+title: "How much woodland would offset UK carbon emissions"
+author: "Dr. Chris J. Martin"
+output: 
+  rmdformats::robobook:
+    self_contained: true
+    thumbnails: false
+    lightbox: true
+    gallery: false
+    highlight: tango
 ---
 
 ```{r setup}
@@ -12,33 +17,69 @@ library(sf)       # for mapping
 library(ggsvg)    # for using svg icons in ggplot2
 ```
 
+## Estimating how much woodland would offset UK carbon emissions
 
-## 1. Read in geospatial files
+**Annual carbon emissions (2019):** 774 million tonnes CO2 equivalent <br>
+
+(Source: [Department for Environment, Food & Rural Affairs, UK Government](https://www.gov.uk/government/statistics/uks-carbon-footprint/carbon-footprint-for-the-uk-and-england-to-2019))
+
+**Area of the UK:** 244511595256 m^2^ = 24451160 hectares (Source:[Office for National Statistics](https://geoportal.statistics.gov.uk/datasets/ons::countries-december-2021-gb-buc/explore?location=49.003829%2C1.290710%2C5.17))
+
+**How much CO~2~ does woodland sequester each year?**
+
+*Estimated area of UK forest (2019):*3.19 million hectares (Source:[Forest Research](https://www.forestresearch.gov.uk/tools-and-resources/statistics/forestry-statistics/forestry-statistics-2019/woodland-area-and-planting-5/))
+
+*Estimated CO~2~ sequestered per annum by UK forests (2020):* 20.5 million tonnes CO~2~e pa (Source:[Forest Research](https://www.forestresearch.gov.uk/tools-and-resources/statistics/forestry-statistics/forestry-statistics-2018/uk-forests-and-climate-change-5/carbon-sequestration/))
+
+So we can calculate *estimated CO~2~ sequestered per annum per hectare:* 6.426332 tonnes CO~2~e pa.
+
+But there is a lot of uncertainty around this. See, for example, 'On average, one hectare of native broadleaf woodland will store 300 - 350 tonnes of carbon over a 100-year period.'. This works out as 3.25 tonnes CO~2~e pa per hectare (*Source:* [The Woodland Trust](https://www.woodlandtrust.org.uk/plant-trees/woodland-carbon-farmers-and-landowners/)).
+
+Using the data above, we can estimate that woodland around 5 times the area of the UK 
+
+```{r}
+# area of woodland required to offset UK emissions (hectares)
+area_to_offset <- 774 * 1e6 / 6.426332
+
+# proportion of the UK (as woodland) required to offset UK emissions
+prop_uk <- area_to_offset / (244511595256 * 0.0001)
+prop_uk
+
+```
+
+## Producing the visualisation
+
+### 1. Read in geospatial files
 
 *Source:* [ONS Geoportal Countries](https://geoportal.statistics.gov.uk/datasets/ons::countries-december-2021-gb-buc/explore?location=49.003829%2C1.290710%2C5.17)
 
 ```{r}
 # read in shapefile for Great Britain
-uk_outline <- read_sf("../data/Countries_(December_2021)_GB_BUC/CTRY_DEC_2021_GB_BUC.shp") %>% 
-  st_union() # merge polygons to give an outline
+uk_outline <- read_sf("../data/gd_ni/NUTS1_Jan_2018_UGCB_in_the_UK.shp") %>% 
+  st_union() 
 
 # check everything looks as expected
 ggplot(uk_outline) +
   geom_sf(colour=NA) +
   theme_void()
+
+# check area of UK
+st_area(uk_outline)
 ```
+
 ## 2. Create a grid
 
 See [sf docs](https://r-spatial.github.io/sf/reference/st_make_grid.html).
 
-```{r}
+```{r, cache=TRUE}
 
-# 20000
+cell_size <- 40000  # for final image
+# cell_size <- 200000   # for testing (make code quicker to run)
 
 # create a hexagonal grid
 grid <- st_make_grid(uk_outline,
                      square = FALSE,
-                     cellsize = 40000) %>%
+                     cellsize = cell_size) %>%
   as.data.frame() %>% 
   #slice_sample(n = 10) %>% 
   st_as_sf()
@@ -50,15 +91,23 @@ ggplot() +
   theme_void()
 
 ```
+
 # 3. Experiment with grid
 
-I experimented with:
-- randomly placing trees within grid cells
-- random colour variations
-- Using different svg icons for trees
+I experimented with: - randomly placing trees within grid cells - random colour variations - Using different svg icons for trees
+
+```{r, cache=TRUE}
+num_trees_per_cell <- sample(c(2,3), 
+                             num_cells, 
+                             replace = TRUE, 
+                             prob = c(0.3, 0.7)
+                             )
+
+#rep(num_trees_per_cell, num_cells)
 
 
-```{r}
+
+
 cell_touches_outline <- function(cell){
 
   cell_touches <- cell %>% 
@@ -77,9 +126,11 @@ grids_UK <- grid %>%
   filter(cell_touches) %>% 
   st_as_sf()
 
+num_cells <- nrow(grids_UK)
+
 # generate a random point within each grid cell
 random_points_in_grid_cells <- st_sample(grids_UK, 
-                                         size = rep(10, nrow(grids_UK))) %>% 
+                                         size = num_trees_per_cell) %>% 
                               st_as_sf()
   
 
@@ -94,9 +145,14 @@ point_coord <- random_points_in_grid_cells %>%
 
 
 ```
+
 ```{r}
 
 # fill="#73BC9B" stroke-color="#73BC9B" fill-opacity="0.5" stroke-opacity="0.8"
+
+# -----------------------------------------------------------------------------
+# svg tree icons as text strings
+# -----------------------------------------------------------------------------
 
 # create an svg to plotted at the centre of each grid hexagon
 tree1_txt <- '<?xml version="1.0" encoding="UTF-8"?>
@@ -146,8 +202,11 @@ plot_df <- point_coord %>%
            tree_type == 3 ~ tree3_txt,
            tree_type == 4 ~ tree4_txt,
            TRUE ~ tree1_txt
-         ))
+         ),
+         tree_size = rnorm(nrow(point_coord), 3.5, 1))
 
+# tree_size <- 2.5 # original
+# tree_size <- 5
 
 ggplot() +
   geom_sf(data = uk_outline, colour=NA) +
@@ -155,17 +214,18 @@ ggplot() +
   geom_point_svg(data = plot_df,
              mapping = aes(X,Y, 
                            svg = I(tree_svg),
-                           css(".tree", fill = tree_colour)),
-             hjust = 0.5, vjust = 0, size = 2.5,
+                           css(".tree", fill = tree_colour),
+                           size = tree_size),
+             hjust = 0.5, vjust = 0,
              css(".tree", 'fill-opacity' = 0.7),
              css(".tree", 'stroke-opacity' = 0.9)
              ) +
   #geom_sf(data = centroids_gs
   scale_svg_fill_identity(aesthetics = css(".tree", fill = tree_colour)) +
   theme_void() +
-  theme(plot.background = element_rect(fill="white", colour="white"))
+  theme(plot.background = element_rect(fill="white", colour="white"),
+        legend.position = "none")
 
 ggsave("../image_output/debug.svg")
 ggsave("../image_output/debug.jpg")
 ```
-
