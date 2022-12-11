@@ -31,9 +31,9 @@ library(ggsvg)    # for using svg icons in ggplot2
 
 ## Estimating how much woodland would offset UK carbon emissions
 
-*\| You can skip this section if you are just interested in how place svgs icons on a map using ggplot2.*
-
-I collected the data need to make a quick estiamte of how much woodland would offset UK carbon emissions. All data is from the UK government.
+|       *You can skip this section if you are just interested in how to place            svgs icons on a map using ggplot2.*
+<br>
+I collected the data need to make a quick estimate of how much woodland would offset UK carbon emissions. All data is from the UK government.
 
 |                                                                |     |                                       |     | Source                                                                                                                                                                                 |
 |----------------------------------------------------------------|-----|---------------------------------------|-----|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -180,7 +180,7 @@ After all the preparatory work, we are now ready to create the tree covered map 
 
 The code below also introduces some variation in the colour and size of the trees, to help give a more organic feel to the woodland.
 
-```{r}
+```{r, message=FALSE}
 # -----------------------------------------------------------------------------
 # The svg tree icons as text strings
 # -----------------------------------------------------------------------------
