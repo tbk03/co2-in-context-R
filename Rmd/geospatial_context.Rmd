@@ -1,5 +1,5 @@
 ---
-title: "How much woodland would offset UK carbon emissions"
+title: "How much woodland would offset UK carbon emissions?"
 author: "Dr. Chris J. Martin"
 output: 
   rmdformats::robobook:
@@ -10,7 +10,19 @@ output:
     highlight: tango
 ---
 
-```{r setup}
+![](images/figure_1.jpg)
+
+**By:** Dr. Chris Martin
+
+**Tools used:** R, R Markdown, tidyverse packages (inc. `dplyr` and `ggplot2`), sf packages (for spatial manipulation).
+
+**Techniques used:** creative coding.
+
+In this notebook I use creative coding techniques to produce a woodland covered map of the UK. Later on, I edited this map to create the infographic above showing the uncertain around how much woodland would be needed to offset UK carbon emissions.
+
+## Notebook setup
+
+```{r setup, warning=FALSE, message=FALSE}
 library(tidyverse)
 
 library(sf)       # for mapping
@@ -19,23 +31,22 @@ library(ggsvg)    # for using svg icons in ggplot2
 
 ## Estimating how much woodland would offset UK carbon emissions
 
-**Annual carbon emissions (2019):** 774 million tonnes CO2 equivalent <br>
+*\| You can skip this section if you are just interested in how place svgs icons on a map using ggplot2.*
 
-(Source: [Department for Environment, Food & Rural Affairs, UK Government](https://www.gov.uk/government/statistics/uks-carbon-footprint/carbon-footprint-for-the-uk-and-england-to-2019))
+I collected the data need to make a quick estiamte of how much woodland would offset UK carbon emissions. All data is from the UK government.
 
-**Area of the UK:** 244511595256 m^2^ = 24451160 hectares (Source:[Office for National Statistics](https://geoportal.statistics.gov.uk/datasets/ons::countries-december-2021-gb-buc/explore?location=49.003829%2C1.290710%2C5.17))
+|                                                                |     |                                       |     | Source                                                                                                                                                                                 |
+|----------------------------------------------------------------|-----|---------------------------------------|-----|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Annual carbon emissions (2019)**                             |     | 774 million tonnes CO~2~e             |     | [DEFRA, UK Government](https://www.gov.uk/government/statistics/uks-carbon-footprint/carbon-footprint-for-the-uk-and-england-to-2019)                                                  |
+| **Area of the UK**                                             |     | 244511595256 m^2^ = 24451160 hectares |     | [Office for National Statistics](https://geoportal.statistics.gov.uk/datasets/ons::countries-december-2021-gb-buc/explore?location=49.003829%2C1.290710%2C5.17)                        |
+| **Estimated area of UK forest (2019)**                         |     | 3.19 million hectares                 |     | [Forest Research](https://www.forestresearch.gov.uk/tools-and-resources/statistics/forestry-statistics/forestry-statistics-2019/woodland-area-and-planting-5/)                         |
+| **Estimated CO~2~ sequestered per annum by UK forests (2020)** |     | 20.5 million tonnes CO~2~e pa         |     | [Forest Research](https://www.forestresearch.gov.uk/tools-and-resources/statistics/forestry-statistics/forestry-statistics-2018/uk-forests-and-climate-change-5/carbon-sequestration/) |
 
-**How much CO~2~ does woodland sequester each year?**
+Based on the data in the table above, we can calculate estimated CO~2~ sequestered per annum per hectare at 6.426332 tonnes CO~2~e pa.
 
-*Estimated area of UK forest (2019):*3.19 million hectares (Source:[Forest Research](https://www.forestresearch.gov.uk/tools-and-resources/statistics/forestry-statistics/forestry-statistics-2019/woodland-area-and-planting-5/))
+There is a lot of uncertainty around this. See, for example, 'On average, one hectare of native broadleaf woodland will store 300 - 350 tonnes of carbon over a 100-year period.'. This works out as 3.25 tonnes CO~2~e pa per hectare (*Source:* [The Woodland Trust](https://www.woodlandtrust.org.uk/plant-trees/woodland-carbon-farmers-and-landowners/)). I'm going to stick with estimate for now, until I can get hold of some expert input.
 
-*Estimated CO~2~ sequestered per annum by UK forests (2020):* 20.5 million tonnes CO~2~e pa (Source:[Forest Research](https://www.forestresearch.gov.uk/tools-and-resources/statistics/forestry-statistics/forestry-statistics-2018/uk-forests-and-climate-change-5/carbon-sequestration/))
-
-So we can calculate *estimated CO~2~ sequestered per annum per hectare:* 6.426332 tonnes CO~2~e pa.
-
-But there is a lot of uncertainty around this. See, for example, 'On average, one hectare of native broadleaf woodland will store 300 - 350 tonnes of carbon over a 100-year period.'. This works out as 3.25 tonnes CO~2~e pa per hectare (*Source:* [The Woodland Trust](https://www.woodlandtrust.org.uk/plant-trees/woodland-carbon-farmers-and-landowners/)).
-
-Using the data above, we can estimate that woodland around 5 times the area of the UK 
+Based on the data at hand, I estimate that woodland around 5 times the area of the UK
 
 ```{r}
 # area of woodland required to offset UK emissions (hectares)
@@ -51,25 +62,26 @@ prop_uk
 
 ### 1. Read in geospatial files
 
-*Source:* [ONS Geoportal Countries](https://geoportal.statistics.gov.uk/datasets/ons::countries-december-2021-gb-buc/explore?location=49.003829%2C1.290710%2C5.17)
+The first thing I needed was an outline of the UK (*Source:* [data.gov.uk](https://www.data.gov.uk/dataset/37edc0ad-ffff-47c9-a01c-cb8d6123ec79/nuts-level-1-january-2018-ultra-generalised-clipped-boundaries-in-the-united-kingdom)).
 
 ```{r}
-# read in shapefile for Great Britain
+# read in shapefile for the UK
 uk_outline <- read_sf("../data/gd_ni/NUTS1_Jan_2018_UGCB_in_the_UK.shp") %>% 
-  st_union() 
+  st_union() # I just want one polygon
 
 # check everything looks as expected
 ggplot(uk_outline) +
   geom_sf(colour=NA) +
   theme_void()
 
-# check area of UK
+# check area of UK 
+# used in the estiamte of much woodland would be needed above
 st_area(uk_outline)
 ```
 
-## 2. Create a grid
+### 2. Creating a grid over the map
 
-See [sf docs](https://r-spatial.github.io/sf/reference/st_make_grid.html).
+The next step is to divide the UK in grid cells, so I can put a specified number of trees within each cell. Later on this will allow control over how dense the woodland appears. See [sf docs](https://r-spatial.github.io/sf/reference/st_make_grid.html) for details of creating grids.
 
 ```{r, cache=TRUE}
 
@@ -80,8 +92,9 @@ cell_size <- 40000  # for final image
 grid <- st_make_grid(uk_outline,
                      square = FALSE,
                      cellsize = cell_size) %>%
+  
+  # get things in the format needed later on
   as.data.frame() %>% 
-  #slice_sample(n = 10) %>% 
   st_as_sf()
 
 # check what the grid looks like
@@ -92,22 +105,9 @@ ggplot() +
 
 ```
 
-# 3. Experiment with grid
-
-I experimented with: - randomly placing trees within grid cells - random colour variations - Using different svg icons for trees
+In the final image I only want trees in the grid cells that are over land. So, the next thing to do is drop the cells which do not cover some land.
 
 ```{r, cache=TRUE}
-num_trees_per_cell <- sample(c(2,3), 
-                             num_cells, 
-                             replace = TRUE, 
-                             prob = c(0.3, 0.7)
-                             )
-
-#rep(num_trees_per_cell, num_cells)
-
-
-
-
 cell_touches_outline <- function(cell){
 
   cell_touches <- cell %>% 
@@ -117,8 +117,6 @@ cell_touches_outline <- function(cell){
   cell_touches[1,1]
 }
 
-cell_touches_outline(grid[1])
-
 # identify grid cells which touch the UK
 grids_UK <- grid %>% 
   as.data.frame() %>% 
@@ -126,14 +124,42 @@ grids_UK <- grid %>%
   filter(cell_touches) %>% 
   st_as_sf()
 
-num_cells <- nrow(grids_UK)
+# check what the grid looks like now
+ggplot() +
+  geom_sf(data = uk_outline, colour=NA) +
+  geom_sf(data = grids_UK, alpha = 0, colour = "grey80") +
+  theme_void()
+```
 
-# generate a random point within each grid cell
+### 3. Generating points within each grid cell
+
+Next I generate points in random locations within each cell. This are the locations where the tree will eventually be placed.
+
+```{r, cache=TRUE, warning=FALSE}
+
+# I would like there to be some variation in how many trees there are in
+# each cell. In this case it is going to be either 2 or 3, choosen at
+# random.
+num_cells <- nrow(grids_UK)
+num_trees_per_cell <- sample(c(2,3), 
+                             num_cells, 
+                             replace = TRUE, 
+                             prob = c(0.3, 0.7)
+                             )
+
+# generate specified number of points at a random location 
+# within each grid cell
 random_points_in_grid_cells <- st_sample(grids_UK, 
                                          size = num_trees_per_cell) %>% 
                               st_as_sf()
   
-
+# check everything looks as expected
+ggplot() +
+  geom_sf(data = uk_outline, colour=NA) +
+  geom_sf(data = grids_UK, alpha = 0, colour = "grey80") +
+  geom_sf(data = random_points_in_grid_cells,
+          alpha = 0.5) +
+  theme_void()
 
 # convert to (x,y) coordinates so can use geom_point (rather than geom_sf)
 point_coord <- random_points_in_grid_cells %>% 
@@ -146,15 +172,19 @@ point_coord <- random_points_in_grid_cells %>%
 
 ```
 
+### 4. Creating a tree covered map of the UK
+
+After all the preparatory work, we are now ready to create the tree covered map itself. This involves placing these svg icons of trees on the map, at the points generated with the grid cells.
+
+![](images/noun-tree-1166062.svg)![](images/noun-tree-1166069.svg)![](images/noun-tree-1186106.svg)
+
+The code below also introduces some variation in the colour and size of the trees, to help give a more organic feel to the woodland.
+
 ```{r}
-
-# fill="#73BC9B" stroke-color="#73BC9B" fill-opacity="0.5" stroke-opacity="0.8"
-
 # -----------------------------------------------------------------------------
-# svg tree icons as text strings
+# The svg tree icons as text strings
 # -----------------------------------------------------------------------------
 
-# create an svg to plotted at the centre of each grid hexagon
 tree1_txt <- '<?xml version="1.0" encoding="UTF-8"?>
 <svg width="128pt" height="128pt" version="1.1" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
  <g class="tree" id="tree1">
@@ -188,29 +218,43 @@ tree4_txt <-  '<?xml version="1.0" encoding="UTF-8"?>
  </g>
 </svg>'
 
-pallette <- c("red", "blue", "yellow", "green")
+# -----------------------------------------------------------------------------
+# Colour palette (based on a photo of native woodland)
+# -----------------------------------------------------------------------------
 
 tree_palette <- c("#DACC9B", "#8A7441", "#5E5C17", "#49431A", "#302D09",
                   "#A9AC32", "#768A0F", "#171404")
 
+# -----------------------------------------------------------------------------
+# Create variation in the type, size and colour of the trees
+# -----------------------------------------------------------------------------
 plot_df <- point_coord %>% 
-  mutate(tree_type = sample.int(4, nrow(point_coord), replace=TRUE),
-         tree_colour = sample(tree_palette, nrow(point_coord), replace=TRUE), 
-         tree_svg = case_when(
-           tree_type == 1 ~ tree1_txt,
-           tree_type == 2 ~ tree2_txt,
-           tree_type == 3 ~ tree3_txt,
-           tree_type == 4 ~ tree4_txt,
-           TRUE ~ tree1_txt
-         ),
-         tree_size = rnorm(nrow(point_coord), 3.5, 1))
+  mutate(
+          # create variation in the type of trees
+          tree_type = sample.int(4, nrow(point_coord), replace=TRUE),
+          tree_svg = case_when(
+             tree_type == 1 ~ tree1_txt,
+             tree_type == 2 ~ tree2_txt,
+             tree_type == 3 ~ tree3_txt,
+             tree_type == 4 ~ tree4_txt,
+             TRUE ~ tree1_txt
+          ),
+          
+          # create variation in the size and colour of trees
+          tree_size = rnorm(nrow(point_coord), 3.5, 1),
+          tree_colour = sample(tree_palette, nrow(point_coord), replace=TRUE))
 
-# tree_size <- 2.5 # original
-# tree_size <- 5
+
+# -----------------------------------------------------------------------------
+# Create variation woodland covered map
+# -----------------------------------------------------------------------------
 
 ggplot() +
+  
+  # show the outline of the UK
   geom_sf(data = uk_outline, colour=NA) +
-  #geom_sf(data = grid, alpha = 0, colour = "grey80") +
+  
+  # show the trees
   geom_point_svg(data = plot_df,
              mapping = aes(X,Y, 
                            svg = I(tree_svg),
@@ -220,12 +264,16 @@ ggplot() +
              css(".tree", 'fill-opacity' = 0.7),
              css(".tree", 'stroke-opacity' = 0.9)
              ) +
-  #geom_sf(data = centroids_gs
+
+  # colour the trees using the specified palette
   scale_svg_fill_identity(aesthetics = css(".tree", fill = tree_colour)) +
+  
+  # simplify the map for editting in graphic design software
   theme_void() +
   theme(plot.background = element_rect(fill="white", colour="white"),
         legend.position = "none")
 
+# save the map / creative coding for editing in Graphic Design software
 ggsave("../image_output/debug.svg")
 ggsave("../image_output/debug.jpg")
 ```
